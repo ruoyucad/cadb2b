@@ -85,7 +85,7 @@ def load_staging(con: duckdb.DuckDBPyConnection) -> dict[str, int]:
 
 def ensure_columns(con: duckdb.DuckDBPyConnection) -> None:
     """Add any column the models reference but the source lacked (legacy files)."""
-    needed = (SQL_DIR / "_required_columns.txt").read_text().split()
+    needed = (SQL_DIR / "_required_columns.txt").read_text(encoding="utf-8").split()
     for line in needed:
         table, col = line.split(".")
         have = {r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()}
@@ -96,7 +96,7 @@ def ensure_columns(con: duckdb.DuckDBPyConnection) -> None:
 def run_models(con: duckdb.DuckDBPyConnection) -> None:
     for f in sorted(SQL_DIR.glob("[0-9]*.sql")):
         try:
-            con.execute(f.read_text())
+            con.execute(f.read_text(encoding="utf-8"))
         except duckdb.Error as e:
             raise RuntimeError(f"{f.name}: {e}") from e
         print(f"[sql]  {f.name}")

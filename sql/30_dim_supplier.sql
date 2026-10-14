@@ -1,9 +1,9 @@
 -- One row per supplier (matched on supplier_key).
 CREATE OR REPLACE TABLE dim_supplier AS
 WITH c AS (SELECT * FROM fct_contract),
-name_pick AS (   -- most frequently used legal name = display name
-  SELECT supplier_key, arg_max(supplier_legal_name, n) AS display_name
-  FROM (SELECT supplier_key, supplier_legal_name, count(*) AS n FROM c
+name_pick AS (   -- most frequently used legal name = display name (ties -> most recent)
+  SELECT supplier_key, arg_max(supplier_legal_name, (n, last_dt)) AS display_name
+  FROM (SELECT supplier_key, supplier_legal_name, count(*) AS n, max(award_date) AS last_dt FROM c
         WHERE supplier_legal_name IS NOT NULL GROUP BY supplier_key, supplier_legal_name)
   GROUP BY supplier_key
 ),

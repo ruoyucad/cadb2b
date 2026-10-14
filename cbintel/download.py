@@ -20,7 +20,7 @@ UA = "cbintel/0.1 (CanadaBuys open-data research)"
 
 
 def _load_meta() -> dict:
-    return json.loads(META.read_text()) if META.exists() else {}
+    return json.loads(META.read_text(encoding="utf-8")) if META.exists() else {}
 
 
 def download(names: list[str] | None = None, quick: bool = False, force: bool = False) -> list[Path]:
@@ -67,5 +67,5 @@ def download(names: list[str] | None = None, quick: bool = False, force: bool = 
         except requests.RequestException as e:
             # One missing/renamed file shouldn't kill the run.
             print(f"[fail] {name}: {e}")
-        META.write_text(json.dumps(meta, indent=2))
+        META.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return got
