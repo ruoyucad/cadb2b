@@ -12,6 +12,9 @@ CREATE OR REPLACE MACRO supplier_key(x) AS
       '[^A-Z0-9 ]', ' ', 'g'),
     '\b(THE|INC|INCORPORATED|LTD|LIMITED|LTEE|LIMITEE|CORP|CORPORATION|CO|COMPANY|LLC|LLP|ULC|LP|SENC|SEC|INCORPOREE)\b', ' ', 'g'),
     '\s+', ' ', 'g'));
+-- NULL for empty or placeholder names ("Not applicable", "Same", "N/A").
+CREATE OR REPLACE MACRO real_name(k) AS
+  CASE WHEN NOT regexp_matches(coalesce(k, ''), '^(|SAME|MEME|NOT APPLICABLE|N A|NA|NONE|UNKNOWN|S O|SANS OBJET)$') THEN k END;
 CREATE OR REPLACE MACRO first_line(x) AS nullif(trim(split_part(replace(coalesce(x, ''), chr(13), ''), chr(10), 1)), '');
 
 CREATE OR REPLACE TABLE fct_contract AS
@@ -55,8 +58,47 @@ clean AS (
   FROM unioned
   WHERE coalesce(supplier_legal_name, supplier_standardized_name) IS NOT NULL
 ),
+-- Supplier matching. Contract history has a government "standardized" name (often an
+-- acronym, e.g. ACT) but award notices only have the legal name, so keying on either
+-- alone splits companies. Treat legal and standardized names seen on the same record as
+-- one company and take connected components (min-label propagation, enough rounds for
+-- the short chains that occur in practice).
+named AS (
+  SELECT *,
+    real_name(supplier_key(first_line(supplier_legal_name))) AS legal_key,
+    real_name(supplier_key(supplier_standardized_name)) AS std_key,
+    coalesce(real_name(supplier_key(first_line(supplier_legal_name))),
+             real_name(supplier_key(supplier_standardized_name)),
+             real_name(supplier_key(supplier_operating_name))) AS node
+  FROM clean
+),
+-- A legal name -> standardized name link is only trusted when it is specific:
+-- numbered companies ("1285027 Ontario Inc.") get chained to unrelated firms, and so do
+-- legal names standardized to several names or standardized names shared by many
+-- legal names (data-entry junk).
+pairs AS (
+  SELECT DISTINCT node, std_key FROM named WHERE node IS NOT NULL AND std_key IS NOT NULL AND std_key <> node
+),
+trusted AS (
+  SELECT node, std_key FROM pairs
+  WHERE NOT regexp_matches(node, '^[0-9]{4,} ') AND NOT regexp_matches(std_key, '^[0-9]{4,} ')
+    AND node IN (SELECT node FROM pairs GROUP BY node HAVING count(*) <= 2)
+    AND std_key IN (SELECT std_key FROM pairs GROUP BY std_key HAVING count(*) <= 10)
+),
+edges AS (
+  SELECT DISTINCT n.node AS a, coalesce(t.std_key, n.node) AS b
+  FROM named n LEFT JOIN trusted t ON t.node = n.node AND t.std_key = n.std_key
+  WHERE n.node IS NOT NULL
+),
+und AS (SELECT a, b FROM edges UNION SELECT b, a FROM edges UNION SELECT a, a FROM edges UNION SELECT b, b FROM edges),
+l1 AS (SELECT a AS n, min(b) AS lbl FROM und GROUP BY a),
+l2 AS (SELECT u.a AS n, min(l.lbl) AS lbl FROM und u JOIN l1 l ON l.n = u.b GROUP BY u.a),
+l3 AS (SELECT u.a AS n, min(l.lbl) AS lbl FROM und u JOIN l2 l ON l.n = u.b GROUP BY u.a),
+l4 AS (SELECT u.a AS n, min(l.lbl) AS lbl FROM und u JOIN l3 l ON l.n = u.b GROUP BY u.a),
+l5 AS (SELECT u.a AS n, min(l.lbl) AS lbl FROM und u JOIN l4 l ON l.n = u.b GROUP BY u.a),
+l6 AS (SELECT u.a AS n, min(l.lbl) AS lbl FROM und u JOIN l5 l ON l.n = u.b GROUP BY u.a),
 keyed AS (
-  SELECT *, supplier_key(supplier_name_best) AS supplier_key FROM clean WHERE supplier_key(supplier_name_best) <> ''
+  SELECT n.*, l.lbl AS supplier_key FROM named n JOIN l6 l ON l.n = n.node
 ),
 ranked AS (
   SELECT *,
