@@ -1,0 +1,11 @@
+# Raw downloads, database and exports stay local: the files are large (legacy
+# CSVs are hundreds of MB, over GitHub's 100 MB limit) and the outputs are the
+# product — this repo is public.
+data/
+output/
+*.duckdb
+*.duckdb.wal
+__pycache__/
+.pytest_cache/
+.venv/
+.env
