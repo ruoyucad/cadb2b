@@ -55,11 +55,12 @@ SELECT
   a.first_award_date, a.last_award_date, a.n_active_years, a.n_buyers,
   a.n_china_origin_contracts,
   b.top_buyers, s.top_segments_zh, s.top_segments_en,
-  -- Placeholders filled later by the enrichment step (website / public sales contact).
-  NULL::VARCHAR AS website, NULL::VARCHAR AS public_email, NULL::VARCHAR AS public_phone,
+  -- From the enrichment step (`cbintel enrich`), kept in data/history.duckdb.
+  e.website, e.emails AS public_email, e.phones AS public_phone,
   NULL::VARCHAR AS summary_zh
 FROM agg a
 JOIN name_pick n USING (supplier_key)
 JOIN latest_addr l USING (supplier_key)
 LEFT JOIN top_buyers b USING (supplier_key)
-LEFT JOIN top_segments s USING (supplier_key);
+LEFT JOIN top_segments s USING (supplier_key)
+LEFT JOIN hist.supplier_contact e USING (supplier_key);

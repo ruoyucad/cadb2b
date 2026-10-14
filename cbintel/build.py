@@ -11,7 +11,7 @@ from pathlib import Path
 
 import duckdb
 
-from .history import record_tenders
+from .history import attach, record_tenders
 from .sources import SOURCES
 
 RAW = Path("data/raw")
@@ -123,6 +123,7 @@ def build(db_path: Path = DB_PATH) -> dict[str, int]:
     for t, n in counts.items():
         print(f"[load] {t}: {n:,} rows")
     ensure_columns(con)
+    attach(con)   # models read hist.supplier_contact
     run_models(con)
     hist = record_tenders(con)
     print(f"[hist] tender_history: {hist['tender_history']:,} rows ({hist['new_tenders']:,} new)")

@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS hist.tender_history (
   regions_of_delivery VARCHAR, notice_url VARCHAR,
   first_seen_at TIMESTAMP, last_seen_at TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS hist.supplier_contact (   -- filled by `cbintel enrich`
+  supplier_key VARCHAR PRIMARY KEY, display_name VARCHAR,
+  website VARCHAR, emails VARCHAR, phones VARCHAR, contact_page VARCHAR,
+  match_score INTEGER, match_reason VARCHAR, method VARCHAR, checked_at TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS hist.run_log (
   started_at TIMESTAMP, finished_at TIMESTAMP, command VARCHAR, status VARCHAR,
   downloads VARCHAR,          -- JSON: file name -> ok / skip / fail

@@ -5,6 +5,7 @@
   python -m cbintel report [--top 50] [--segment 46 --segment 56]
   python -m cbintel all [--quick]
   python -m cbintel history            recent runs and tender-history size
+  python -m cbintel enrich --segment 56 [--top 50] [--refresh]   find websites / public contacts
 
 `build` and `all` are recorded in the run log (data/history.duckdb).
 """
@@ -14,6 +15,7 @@ from datetime import datetime
 
 from .build import build
 from .download import download
+from .enrich import enrich
 from .history import log_run, show_history
 from .report import report
 from .sources import SOURCES
@@ -33,6 +35,10 @@ def main() -> None:
     a = sub.add_parser("all", help="download + build + report")
     a.add_argument("--quick", action="store_true")
     sub.add_parser("history", help="show recent runs from the run log")
+    e = sub.add_parser("enrich", help="find websites and public contacts for top suppliers")
+    e.add_argument("--segment", action="append", required=True, help="UNSPSC 2-digit segment, e.g. 56")
+    e.add_argument("--top", type=int, default=50)
+    e.add_argument("--refresh", action="store_true", help="look up again even if already done")
     args = p.parse_args()
 
     if args.cmd in ("build", "all"):
@@ -59,6 +65,8 @@ def main() -> None:
         report(top_n=args.top, segments=args.segment)
     elif args.cmd == "history":
         show_history()
+    elif args.cmd == "enrich":
+        enrich(args.segment, top_n=args.top, refresh=args.refresh)
 
 
 if __name__ == "__main__":
