@@ -23,11 +23,12 @@ def _load_meta() -> dict:
     return json.loads(META.read_text(encoding="utf-8")) if META.exists() else {}
 
 
-def download(names: list[str] | None = None, quick: bool = False, force: bool = False) -> list[Path]:
+def download(names: list[str] | None = None, quick: bool = False, force: bool = False) -> dict[str, str]:
+    """Returns file name -> 'ok' | 'skip' | 'fail'."""
     RAW.mkdir(parents=True, exist_ok=True)
     meta = _load_meta()
     selected = names or (QUICK if quick else list(SOURCES))
-    got: list[Path] = []
+    status: dict[str, str] = {}
 
     for name in selected:
         url, _group = SOURCES[name]
@@ -45,7 +46,7 @@ def download(names: list[str] | None = None, quick: bool = False, force: bool = 
             with requests.get(url, headers=headers, stream=True, timeout=(15, 300)) as r:
                 if r.status_code == 304:
                     print(f"[skip] {name}: unchanged")
-                    got.append(dest)
+                    status[name] = "skip"
                     continue
                 r.raise_for_status()
                 tmp = dest.with_suffix(".csv.part")
@@ -63,9 +64,10 @@ def download(names: list[str] | None = None, quick: bool = False, force: bool = 
                     "downloaded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 }
                 print(f"[ok]   {name}: {size/1e6:.1f} MB in {time.time()-t0:.0f}s")
-                got.append(dest)
+                status[name] = "ok"
         except requests.RequestException as e:
             # One missing/renamed file shouldn't kill the run.
             print(f"[fail] {name}: {e}")
+            status[name] = "fail"
         META.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-    return got
+    return status

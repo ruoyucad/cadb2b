@@ -87,3 +87,36 @@ def test_report_files(db):
     lb = (work / "output" / "supplier_leaderboard.csv").read_bytes()
     assert lb.startswith(b"\xef\xbb\xbf") and "公司名称".encode() in lb
     assert (work / "output" / "segment_overview.md").exists()
+
+
+def test_tender_history_survives_rebuild(tmp_path, monkeypatch):
+    work = tmp_path
+    monkeypatch.chdir(work)
+    write_fixtures(work / "data" / "raw")
+    build()
+    hist = duckdb.connect("data/history.duckdb", read_only=True)
+    rows = hist.execute("SELECT tender_id, title, first_seen_at FROM tender_history ORDER BY 1").fetchall()
+    hist.close()
+    assert [r[0] for r in rows] == ["T-1", "T-2", "T-3"]
+    assert "amended" in rows[0][1]
+
+    # A rebuild (fresh analytical DB) adds nothing new and keeps first_seen_at.
+    (work / "data" / "cbintel.duckdb").unlink()
+    stats = build()
+    assert stats["new_tenders"] == 0 and stats["tender_history"] == 3
+    hist = duckdb.connect("data/history.duckdb", read_only=True)
+    again = hist.execute("SELECT tender_id, title, first_seen_at FROM tender_history ORDER BY 1").fetchall()
+    hist.close()
+    assert [(r[0], r[2]) for r in again] == [(r[0], r[2]) for r in rows]
+    assert (work / "data" / "parquet" / "hist_tender_history.parquet").exists()
+
+
+def test_run_log(db, tmp_path):
+    from datetime import datetime
+    from cbintel.history import log_run
+    path = tmp_path / "h.duckdb"
+    log_run(datetime(2026, 1, 1), "all", "ok", {"tenders_open": "ok"}, {"new_tenders": 2}, path=path)
+    con = duckdb.connect(str(path), read_only=True)
+    (cmd, status, downloads), = con.execute("SELECT command, status, downloads FROM run_log").fetchall()
+    con.close()
+    assert (cmd, status) == ("all", "ok") and "tenders_open" in downloads

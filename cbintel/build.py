@@ -11,6 +11,7 @@ from pathlib import Path
 
 import duckdb
 
+from .history import record_tenders
 from .sources import SOURCES
 
 RAW = Path("data/raw")
@@ -104,13 +105,18 @@ def run_models(con: duckdb.DuckDBPyConnection) -> None:
 
 def export_parquet(con: duckdb.DuckDBPyConnection) -> None:
     PARQUET.mkdir(parents=True, exist_ok=True)
-    tables = [r[0] for r in con.execute(
-        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'").fetchall()]
-    for t in tables:
-        con.execute(f"COPY {t} TO '{PARQUET / (t + '.parquet')}' (FORMAT parquet, COMPRESSION zstd)")
+    tables = con.execute(
+        "SELECT table_catalog, table_name FROM information_schema.tables "
+        "WHERE table_schema='main' AND table_catalog IN (current_database(), 'hist')").fetchall()
+    for db, t in tables:
+        # History tables are written as hist_<name>.parquet: a backup of data that
+        # cannot be re-downloaded.
+        out = PARQUET / (f"hist_{t}" if db == "hist" else t)
+        con.execute(f"COPY {db}.{t} TO '{out}.parquet' (FORMAT parquet, COMPRESSION zstd)")
 
 
 def build(db_path: Path = DB_PATH) -> dict[str, int]:
+    """Rebuild the database; returns row counts for the run log."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(db_path))
     counts = load_staging(con)
@@ -118,9 +124,12 @@ def build(db_path: Path = DB_PATH) -> dict[str, int]:
         print(f"[load] {t}: {n:,} rows")
     ensure_columns(con)
     run_models(con)
+    hist = record_tenders(con)
+    print(f"[hist] tender_history: {hist['tender_history']:,} rows ({hist['new_tenders']:,} new)")
     export_parquet(con)
-    for t in ("dim_supplier", "mart_supplier_leaderboard", "mart_open_goods_tenders"):
+    for t in ("fct_contract", "dim_supplier", "mart_supplier_leaderboard", "mart_open_goods_tenders"):
         n = con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+        counts[t] = n
         print(f"[mart] {t}: {n:,} rows")
     con.close()
-    return counts
+    return {**counts, **hist}

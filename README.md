@@ -40,6 +40,23 @@ python -m cbintel report --top 50 --segment 46 --segment 56   # 导出指定品�
 - `open_goods_tenders.csv` — 当前开放的货物类招标，附"该品目历史中标者"
 - `segment_overview.md` — 各品类的中标公司数、合同数、金额，用来选赛道
 
+## 每日自动更新和历史记录
+
+Windows 任务计划程序里的 `cbintel-daily` 每天 22:00（东京时间，政府文件更新之后）运行
+`scripts/run_daily.bat`，即 `python -m cbintel all`。电脑当时关机的话，下次开机补跑。
+输出追加到 `data/logs/daily.log`。
+
+`data/history.duckdb` 保存重建时不能丢的数据（**不要删**，`data/parquet/hist_*.parquet` 是备份）：
+
+- `tender_history` — 见过的每一条招标。开放招标文件只列当前开放的，截止后就消失，所以每天追加保存
+- `run_log` — 每次运行的时间、下载了哪些文件、结果、新增招标数
+
+```bash
+python -m cbintel history         # 查看最近的运行记录
+```
+
+合同和中标公告不需要另存：政府每次发布的都是完整文件，每次重建即为最新。
+
 ## 处理逻辑
 
 ```
